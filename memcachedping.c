@@ -3,7 +3,7 @@
 #include <string.h>
 #include <time.h>
 
-long size=100000;
+long size=1000;
 int main(int argc, char **argv) {
   memcached_server_st *servers = NULL;
   memcached_st *memc;
@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
   memc = memcached_create(NULL);
  
 
-  printf("Server %s port %d\n",server,port);
+  printf("Server: %s \nPort: %d\n",server,port);
 
   servers = memcached_server_list_append(servers, server, port, &rc);
   rc = memcached_server_push(memc, servers);
@@ -50,15 +50,25 @@ int main(int argc, char **argv) {
     worse_timer=0; 
     current_timer=0;
     while(count){
-      clock_gettime(CLOCK_MONOTONIC_RAW, &first_timer);
+      if(clock_gettime(CLOCK_MONOTONIC_RAW, &first_timer)!=0){
+         perror("start timer:");
+         exit(1);
+      }
+       
       retrieved_value = memcached_get(memc, key, strlen(key), &value_length, &flags, &rc);
-      clock_gettime(CLOCK_MONOTONIC_RAW, &second_timer);
+      if(clock_gettime(CLOCK_MONOTONIC_RAW, &second_timer)!=0){
+         perror("second timer:");
+         exit(1);
+      }
+
       current_timer=second_timer.tv_nsec - first_timer.tv_nsec;
+     // if (current_timer < 0)
+     //    printf("%ld %ld %ld\n", current_timer,second_timer.tv_nsec,first_timer.tv_nsec);
       if((current_timer > worse_timer) || first_flag==1 ) 
          worse_timer=current_timer;
       if((current_timer < best_timer)|| first_flag==1){
          best_timer=current_timer;
-         first_flag==0;
+         first_flag=0;
       }
       avg_timer+=current_timer;
 
@@ -73,8 +83,8 @@ int main(int argc, char **argv) {
       }
       count--;
     }
-    printf("Total: %ld errores: %ld  success: %ld avg: %ld best:%ld worse: %ld\n",
-           count, errors_count,succesfull_count, avg_timer/size , best_timer , worse_timer);
+    printf("Total: %ld errores: %ld  success: %ld avg: %f best:%ld worse: %ld total time: %ld\n",
+           count, errors_count,succesfull_count,(float)(avg_timer/size) , best_timer , worse_timer, avg_timer);
     fflush(stdout);
   }
   return 0;
