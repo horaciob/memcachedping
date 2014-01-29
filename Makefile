@@ -1,2 +1,2 @@
 all:    
-	gcc memcachedping.c -o test  -lmemcached -lrt -Wall
+	gcc memcachedping.c -o test -g -lmemcached -lrt -Wall
