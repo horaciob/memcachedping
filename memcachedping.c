@@ -4,7 +4,7 @@
 #include <time.h>
 #include <stdlib.h>
 
-long size=1000;
+long size=10000;
 
 
 int fill_value(char *value,int size){
