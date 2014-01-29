@@ -2,8 +2,20 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <stdlib.h>
 
 long size=10000;
+
+
+int fill_value(char *value,int size){
+  int i=0;
+  for (i=0; i < size; i++){
+    value[i]='A';
+  }
+  value[i]='\0';
+  return 0;
+}
+
 
 double get_wall_time() {
   int i;
@@ -21,7 +33,7 @@ int main(int argc, char **argv) {
   memcached_st *memc;
   memcached_return rc;
   char *key = "test";
-  char *value = "horacio";
+  char value[1000000];  //The default maximum object size is 1MB in memcached
   char server[50];
   int  port=0;
   long errors_count=0,succesfull_count=0,count=size;
@@ -32,12 +44,16 @@ int main(int argc, char **argv) {
   double avg_timer=0,best_timer=0,worse_timer=0,current_timer=0;
   int first_flag,i;
   int segments[5];
+  int package_size=50;
   strncpy(server,argv[1],strlen(argv[1])+1);
   port=atoi(argv[2]);
   memc = memcached_create(NULL);
- 
+   
+  package_size=atoi(argv[3]);
+  
+  fill_value(value,package_size);  
 
-  printf("Server: %s \nPort: %d\n",server,port);
+  printf("Server: %s \nPort: %d\n size in Bytes:%d\n ",server,port,package_size);
 
   servers = memcached_server_list_append(servers, server, port, &rc);
   rc = memcached_server_push(memc, servers);
@@ -53,6 +69,8 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Couldn't store key: %s\n", memcached_strerror(memc, rc));
     exit(1);
   }
+
+  flags=MEMCACHED_BEHAVIOR_TCP_NODELAY;
   while(1){
     count=size;
     first_flag=1;
@@ -70,7 +88,6 @@ int main(int argc, char **argv) {
       first_timer=get_wall_time();
       retrieved_value = memcached_get(memc, key, strlen(key), &value_length, &flags, &rc);
       second_timer=get_wall_time();
-
       current_timer=second_timer - first_timer;
      // if (current_timer < 0)
      //    printf("%ld %ld %ld\n", current_timer,second_timer.tv_nsec,first_timer.tv_nsec);
@@ -89,7 +106,7 @@ int main(int argc, char **argv) {
       else{
         succesfull_count+=1;
         //printf("The key '%s' returned value '%s'.\n", key, retrieved_value);
-        free(retrieved_value);
+        //free(retrieved_value);
       }
 
 
@@ -108,11 +125,10 @@ int main(int argc, char **argv) {
       else if (current_timer >= 200.0){
          segments[4]++;
       }
-
       count--;
     }
-    printf("Total: %ld errores: %ld  success: %ld avg: %f best:%f worse: %f total time: %f      seg0: %d seg1: %d seg2: %d seg3: %d seg4: %d \n",
-            count, errors_count,succesfull_count,(float)(avg_timer/size) , best_timer , worse_timer, avg_timer, segments[0],segments[1],segments[2],segments[3],segments[4]);
+    printf("Value size: %d Bytes Error: %ld Success: %ld Avg: %.3f Best:%.3f Worse: %.3f total time: %.3f      seg0: %d seg1: %d seg2: %d seg3: %d seg4: %d \n",
+            (int)strlen(retrieved_value),errors_count,succesfull_count,(float)(avg_timer/size) , best_timer , worse_timer, avg_timer, segments[0],segments[1],segments[2],segments[3],segments[4]);
 
     fflush(stdout);
   }
