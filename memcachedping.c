@@ -3,7 +3,19 @@
 #include <string.h>
 #include <time.h>
 
-long size=1000;
+long size=10000;
+
+double get_wall_time() {
+  int i;
+  struct timespec t;
+  if((i = clock_gettime(CLOCK_MONOTONIC_RAW, &t))) {
+    printf("\nError: %d", i); 
+    exit(-1);
+  }
+  return ((double)t.tv_sec + (double) t.tv_nsec/1000000000)*1000;
+}
+
+
 int main(int argc, char **argv) {
   memcached_server_st *servers = NULL;
   memcached_st *memc;
@@ -16,10 +28,10 @@ int main(int argc, char **argv) {
   char *retrieved_value;
   size_t value_length;
   uint32_t flags;
-  struct timespec first_timer,second_timer;
-  long avg_timer=0,best_timer=0,worse_timer=0,current_timer=0;
-  int first_flag;
-
+  double  first_timer,second_timer;
+  double avg_timer=0,best_timer=0,worse_timer=0,current_timer=0;
+  int first_flag,i;
+  int segments[5];
   strncpy(server,argv[1],strlen(argv[1])+1);
   port=atoi(argv[2]);
   memc = memcached_create(NULL);
@@ -35,7 +47,7 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
-  rc = memcached_set(memc, key, strlen(key), value, strlen(value), (time_t)0, (uint32_t)0);
+  rc = memcached_set(memc, key, strlen(key), value, strlen(value), (time_t)0, MEMCACHED_BEHAVIOR_TCP_NODELAY);
 
   if (rc != MEMCACHED_SUCCESS){
     fprintf(stderr, "Couldn't store key: %s\n", memcached_strerror(memc, rc));
@@ -49,19 +61,17 @@ int main(int argc, char **argv) {
     best_timer=1000;
     worse_timer=0; 
     current_timer=0;
-    while(count){
-      if(clock_gettime(CLOCK_MONOTONIC_RAW, &first_timer)!=0){
-         perror("start timer:");
-         exit(1);
-      }
-       
-      retrieved_value = memcached_get(memc, key, strlen(key), &value_length, &flags, &rc);
-      if(clock_gettime(CLOCK_MONOTONIC_RAW, &second_timer)!=0){
-         perror("second timer:");
-         exit(1);
-      }
+    
+    for(i=0;i<5;i++){
+      segments[i]=0;
+    }
 
-      current_timer=second_timer.tv_nsec - first_timer.tv_nsec;
+    while(count){
+      first_timer=get_wall_time();
+      retrieved_value = memcached_get(memc, key, strlen(key), &value_length, &flags, &rc);
+      second_timer=get_wall_time();
+
+      current_timer=second_timer - first_timer;
      // if (current_timer < 0)
      //    printf("%ld %ld %ld\n", current_timer,second_timer.tv_nsec,first_timer.tv_nsec);
       if((current_timer > worse_timer) || first_flag==1 ) 
@@ -81,10 +91,29 @@ int main(int argc, char **argv) {
         //printf("The key '%s' returned value '%s'.\n", key, retrieved_value);
         free(retrieved_value);
       }
+
+
+      if(current_timer < 1.0){
+         segments[0]++;
+      }
+      else if(current_timer >= 1.0 && current_timer < 50.0){
+         segments[1]++;
+      }
+      else if (current_timer >= 50.0 && current_timer <100.0){
+         segments[2]++;
+      }
+      else if (current_timer >= 100.0 && current_timer <150.0){
+         segments[3]++;
+      }
+      else if (current_timer >= 200.0){
+         segments[4]++;
+      }
+
       count--;
     }
-    printf("Total: %ld errores: %ld  success: %ld avg: %f best:%ld worse: %ld total time: %ld\n",
-           count, errors_count,succesfull_count,(float)(avg_timer/size) , best_timer , worse_timer, avg_timer);
+    printf("Total: %ld errores: %ld  success: %ld avg: %f best:%f worse: %f total time: %f      seg0: %d seg1: %d seg2: %d seg3: %d seg4: %d \n",
+            count, errors_count,succesfull_count,(float)(avg_timer/size) , best_timer , worse_timer, avg_timer, segments[0],segments[1],segments[2],segments[3],segments[4]);
+
     fflush(stdout);
   }
   return 0;
