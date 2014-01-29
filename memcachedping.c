@@ -4,7 +4,7 @@
 #include <time.h>
 #include <stdlib.h>
 
-long size=10000;
+long size=1000;
 
 
 int fill_value(char *value,int size){
@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
   double avg_timer=0,best_timer=0,worse_timer=0,current_timer=0;
   int first_flag,i;
   int segments[5];
-  int package_size=50;
+  int package_size=0,real_size=0;
   strncpy(server,argv[1],strlen(argv[1])+1);
   port=atoi(argv[2]);
   memc = memcached_create(NULL);
@@ -106,7 +106,9 @@ int main(int argc, char **argv) {
       else{
         succesfull_count+=1;
         //printf("The key '%s' returned value '%s'.\n", key, retrieved_value);
-        //free(retrieved_value);
+        if(real_size <= 0)
+          real_size = strlen(retrieved_value);
+        free(retrieved_value);
       }
 
 
@@ -128,7 +130,7 @@ int main(int argc, char **argv) {
       count--;
     }
     printf("Value size: %d Bytes Error: %ld Success: %ld Avg: %.3f Best:%.3f Worse: %.3f total time: %.3f      seg0: %d seg1: %d seg2: %d seg3: %d seg4: %d \n",
-            (int)strlen(retrieved_value),errors_count,succesfull_count,(float)(avg_timer/size) , best_timer , worse_timer, avg_timer, segments[0],segments[1],segments[2],segments[3],segments[4]);
+            real_size,errors_count,succesfull_count,(float)(avg_timer/size) , best_timer , worse_timer, avg_timer, segments[0],segments[1],segments[2],segments[3],segments[4]);
 
     fflush(stdout);
   }
