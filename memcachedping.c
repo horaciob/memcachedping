@@ -4,14 +4,22 @@
 #include <time.h>
 #include <stdlib.h>
 #include <stdlib.h>
+#include <pthread.h>
+#include <unistd.h>
 
+#define SPREAD_GET_RANGE 100
+#define SPREAD_WRITE_RANGE 100
+#define MAX_THREADS 50
+#define TIMER_SPAWN_THREAD 1
 
-#define SPREAD_GET_RANGE 10
-#define SPREAD_WRITE_RANGE 10
 long size=10000;
+long thread_counter=0;
+char server[100];
+int port=11211, package_size=1024, spread_range=30;
 
+pthread_mutex_t mutex_stdio = PTHREAD_MUTEX_INITIALIZER;
 
-int fill_value(char *server,int port,int size,int spread_range){
+int fill_value(int spread_range){
   memcached_server_st *servers = NULL;
   memcached_st *memc;
   memcached_return rc;
@@ -34,6 +42,7 @@ int fill_value(char *server,int port,int size,int spread_range){
     for (i=0; i < size; i++){
       value[i]='A';
     }
+
     value[i]='\0';
     sprintf(key,"test%d",spread_range);
     rc = memcached_set(memc, key, strlen(key), value, strlen(value), (time_t)0, MEMCACHED_BEHAVIOR_TCP_NODELAY);
@@ -59,7 +68,7 @@ double get_wall_time() {
   return ((double)t.tv_sec + (double) t.tv_nsec/1000000000)*1000;
 }
 
-int start_get_test(char *server,int port, int package_size,int spread_range) {
+int *start_get_test(void *message) {
 
   memcached_server_st *servers = NULL;
   memcached_st *memc;
@@ -76,7 +85,6 @@ int start_get_test(char *server,int port, int package_size,int spread_range) {
   int real_size=0;
   memc = memcached_create(NULL);
    
-  printf("Server: %s \nPort: %d\n size in Bytes:%d\n ",server,port,package_size);
 
   servers = memcached_server_list_append(servers, server, port, &rc);
   rc = memcached_server_push(memc, servers);
@@ -91,8 +99,8 @@ int start_get_test(char *server,int port, int package_size,int spread_range) {
   
   printf("UDP FLAG SET AS: %d\n",(int)memcached_behavior_get(memc,MEMCACHED_BEHAVIOR_USE_UDP));
    
-
   flags=MEMCACHED_BEHAVIOR_TCP_NODELAY;
+
   while(1){
     count=size;
     first_flag=1;
@@ -106,7 +114,7 @@ int start_get_test(char *server,int port, int package_size,int spread_range) {
     for(i=0;i<5;i++){
       segments[i]=0;
     }
-
+    srand((unsigned int)get_wall_time());
     while(count){
       sprintf(key,"test%d", rand() % spread_range);
       first_timer=get_wall_time();
@@ -153,25 +161,39 @@ int start_get_test(char *server,int port, int package_size,int spread_range) {
       }
       count--;
     }
-    printf("Value size: %d Bytes Error: %ld Success: %ld Avg: %.3f Best:%.3f Worse: %.3f total time: %.3f      seg0: %d seg1: %d seg2: %d seg3: %d seg4: %d \n",
-            real_size,errors_count,succesfull_count,(float)(avg_timer/size) , best_timer , worse_timer, avg_timer, segments[0],segments[1],segments[2],segments[3],segments[4]);
 
-    fflush(stdout);
+    pthread_mutex_lock( &mutex_stdio );
+      printf("Threads: %ld Value size: %d Bytes Error: %ld Success: %ld Avg: %.3f Best:%.3f Worse: %.3f total time: %.3f      seg0: %d seg1: %d seg2: %d seg3: %d seg4: %d \n",
+              thread_counter,real_size,errors_count,succesfull_count,(float)(avg_timer/size) , best_timer , worse_timer, avg_timer, segments[0],segments[1],segments[2],segments[3],segments[4]);
+
+      fflush(stdout);
+
+    pthread_mutex_unlock( &mutex_stdio );
+
   }
   return 0;
 
 }
+
 int main(int argc, char **argv) {
-  char server[100];
-  int  port=0;
-  int package_size=0;
   strncpy(server,argv[1],strlen(argv[1])+1);
   port=atoi(argv[2]);
   package_size=atoi(argv[3]);
+  pthread_t threads[MAX_THREADS];
+  int message=0,i;
+  printf("Server: %s \nPort: %d\n size in Bytes:%d\n ",server,port,package_size);
 
-
-  fill_value(server,port,package_size,SPREAD_WRITE_RANGE);  
-
-  start_get_test(server,port,package_size,SPREAD_GET_RANGE);
+  fill_value(SPREAD_WRITE_RANGE);  
+   
+  while(thread_counter < MAX_THREADS){
+    thread_counter++;
+    pthread_create( &threads[thread_counter-1], NULL, (void*)start_get_test, (void*) message);
+    sleep(60*TIMER_SPAWN_THREAD);
+  }
+ 
+  for(i=0 ; i<MAX_THREADS;i++){
+    pthread_join( threads[i], NULL);
+  }
+   
   return 0;
 }
