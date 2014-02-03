@@ -153,10 +153,10 @@ int *start_get_test(void *message) {
       else if (current_timer >= 50.0 && current_timer <100.0){
          segments[2]++;
       }
-      else if (current_timer >= 100.0 && current_timer <150.0){
+      else if (current_timer >= 100.0 && current_timer <200.0){
          segments[3]++;
       }
-      else if (current_timer >= 200.0){
+      else{
          segments[4]++;
       }
       count--;
